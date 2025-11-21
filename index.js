@@ -68,6 +68,28 @@ bot.command("msg", async (ctx) => {
   }
 });
 
+// ======== команда /msg для публикаций ========
+
+bot.command("msg", async (ctx) => {
+  if (!trusted.has(ctx.from.id)) {
+    return ctx.reply("Нет доступа.");
+  }
+
+  const text = ctx.message.text.replace("/msg", "").trim();
+
+  if (!text) {
+    return ctx.reply("Нужно указать текст. Пример:\n/msg <wow boost> August 18–20");
+  }
+
+  try {
+    await ctx.telegram.sendMessage(CHANNEL_ID, text);
+    await ctx.reply("Сообщение отправлено.");
+  } catch (e) {
+    console.error("Ошибка отправки:", e);
+    ctx.reply("Ошибка при отправке в канал.");
+  }
+});
+
 
 // ======== обработка текстовых сообщений ========
 
