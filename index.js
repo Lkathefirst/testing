@@ -1,8 +1,8 @@
 require("dotenv").config();
-const { Telegraf } = require("telegraf");
+const { Telegraf, Markup } = require("telegraf");
 const fs = require("fs");
 
-// переменные окружения
+// ENV
 const TOKEN = process.env.BOT_TOKEN;
 const CHANNEL_ID = process.env.CHANNEL_ID;
 const SECRET_KEY = process.env.SECRET_KEY;
@@ -14,7 +14,7 @@ if (!TOKEN || !CHANNEL_ID || !SECRET_KEY) {
 
 const bot = new Telegraf(TOKEN);
 
-// ======== доверенные пользователи ========
+// ===== доверенные =====
 
 let trusted = new Set();
 
@@ -33,7 +33,7 @@ function saveTrusted() {
 
 loadTrusted();
 
-// ======== /start с секретным параметром ========
+// ===== /start =====
 
 bot.start((ctx) => {
   const parts = ctx.message.text.split(" ");
@@ -41,14 +41,13 @@ bot.start((ctx) => {
   if (parts.length > 1 && parts[1] === SECRET_KEY) {
     trusted.add(ctx.from.id);
     saveTrusted();
-    return ctx.reply("Доступ выдан. Используй команду /msg для отправки сообщений.");
+    return ctx.reply("Доступ выдан. Используй команду /msg.");
   }
 
   ctx.reply("Нет доступа.");
 });
 
-
-// ======== команда /msg — единственный способ отправить сообщение в канал ========
+// ===== команда /msg =====
 
 bot.command("msg", async (ctx) => {
   if (!trusted.has(ctx.from.id)) {
@@ -59,58 +58,65 @@ bot.command("msg", async (ctx) => {
 
   if (!raw) {
     return ctx.reply(
-      `Нельзя отправить пустое сообщение.\n\nПример:\n/msg "wow boost" 18.11.2025-20.11.2025`
+      `Формат:\n/msg "keyword" 18.11.2025-20.11.2025`
     );
   }
 
-  // ищем keyword в кавычках
+  // keyword = текст внутри кавычек
   const keywordMatch = raw.match(/"([^"]+)"/);
   const keyword = keywordMatch ? keywordMatch[1] : "keyword not found";
 
-  // итоговое сообщение для канала
-  const fullMessage =
-    `${raw}\n\n` +
-    `новый спам-репорт.\n\n` +
-    `чтобы зарепортить:\n` +
-    `1. переходим по ссылке https://search.google.com/search-console/report-spam?hl=en\n` +
-    `2. url: https://kingboost.net\n` +
-    `3. выбираем "other"\n` +
-    `4. в появившемся окне пишем keyword: ${keyword}\n` +
-    `5. добавляем сообщеине в произвольной форме, например: "скачок поисковых запросов с 20 до 500 с 18 по 20 августа 2025 года"\n\n` +
-    `добавляйте всё что можете в запрос что может улучшить его содержание: насколько выросли показы, что причин для роста не было, через 1–2 дня кол-во запросов вернулось на свое место, и т.д.`;
+  // сообщение в канал
+  const finalMessage = `${raw}\n\n(подробности по кнопке ниже)`;
+
+  // кнопка
+  const keyboard = Markup.inlineKeyboard([
+    Markup.button.callback("Как зарепортить", `report_${keyword}`)
+  ]);
 
   try {
-    await ctx.telegram.sendMessage(CHANNEL_ID, fullMessage);
-    await ctx.reply("Сообщение отправлено в канал.");
+    await ctx.telegram.sendMessage(CHANNEL_ID, finalMessage, keyboard);
+    await ctx.reply("Сообщение отправлено.");
   } catch (err) {
     console.error("Ошибка отправки:", err);
-    ctx.reply("Ошибка при отправке в канал. Сообщи админу.");
+    ctx.reply("Ошибка при отправке.");
   }
 });
 
+// ===== обработка кнопки =====
 
-// ======== любые сообщения без /msg ========
+bot.on("callback_query", async (ctx) => {
+  const data = ctx.callbackQuery.data;
+
+  if (!data.startsWith("report_")) return;
+
+  const keyword = data.replace("report_", "").trim();
+
+  const info =
+    `чтобы зарепортить:\n\n` +
+    `1. перейдите: https://search.google.com/search-console/report-spam?hl=en\n` +
+    `2. url: https://kingboost.net\n` +
+    `3. выберите "other"\n` +
+    `4. keyword: ${keyword}\n` +
+    `5. напишите, например: "скачок поисковых запросов с 20 до 500 с 18 по 20 августа 2025 года"\n\n` +
+    `добавьте всё, что улучшает жалобу: рост показов, что причин нет, через 1–2 дня откатилось назад и т.д.`
+
+  await ctx.answerCbQuery(info, { show_alert: true });
+});
+
+// ===== любые сообщения без /msg =====
 
 bot.on("message", (ctx) => {
   if (!trusted.has(ctx.from.id)) return ctx.reply("Нет доступа.");
 
   return ctx.reply(
     `сообщения в канал отправляются только через /msg.\n\n` +
-    `ваше сообщение должно быть формата:\n` +
-    `/msg "keyword" "date"\n\n` +
-    `пример:\n/msg "wow boost" 18.11.2025-20.11.2025`
+    `формат:\n/msg "keyword" 18.11.2025-20.11.2025`
   );
 });
 
+// ===== запуск =====
 
-// ======== запуск ========
-
-bot.launch().then(() => {
-  console.log("Бот запущен.");
-}).catch((e) => {
-  console.error("Ошибка запуска:", e);
-});
-
-// корректное завершение
+bot.launch();
 process.once("SIGINT", () => bot.stop("SIGINT"));
 process.once("SIGTERM", () => bot.stop("SIGTERM"));
