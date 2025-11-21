@@ -2,18 +2,19 @@ require("dotenv").config();
 const { Telegraf } = require("telegraf");
 const fs = require("fs");
 
+// переменные окружения
 const TOKEN = process.env.BOT_TOKEN;
-const CHANNEL_ID = process.env.CHANNEL_ID; // пример: "-1001234567890"
-const SECRET_KEY = process.env.SECRET_KEY; // пример: "secret123"
+const CHANNEL_ID = process.env.CHANNEL_ID;
+const SECRET_KEY = process.env.SECRET_KEY;
 
 if (!TOKEN || !CHANNEL_ID || !SECRET_KEY) {
-  console.error("ERROR: One of BOT_TOKEN, CHANNEL_ID, SECRET_KEY is not set");
+  console.error("ERROR: BOT_TOKEN, CHANNEL_ID или SECRET_KEY не заданы");
   process.exit(1);
 }
 
 const bot = new Telegraf(TOKEN);
 
-// ======== хранение доверенных пользователей ========
+// ======== доверенные пользователи ========
 
 let trusted = new Set();
 
@@ -32,7 +33,7 @@ function saveTrusted() {
 
 loadTrusted();
 
-// ======== /start с секретным ключом ========
+// ======== /start с секретным параметром ========
 
 bot.start((ctx) => {
   const parts = ctx.message.text.split(" ");
@@ -40,13 +41,13 @@ bot.start((ctx) => {
   if (parts.length > 1 && parts[1] === SECRET_KEY) {
     trusted.add(ctx.from.id);
     saveTrusted();
-    return ctx.reply("Доступ выдан. Можешь отправлять сообщения.");
+    return ctx.reply("Доступ выдан. Можешь отправлять сообщения командой /msg.");
   }
 
-  ctx.reply("У тебя нет доступа.");
+  ctx.reply("Нет доступа.");
 });
 
-// ======== команда /msg ========
+// ======== единственный способ отправить сообщение: /msg ========
 
 bot.command("msg", async (ctx) => {
   if (!trusted.has(ctx.from.id)) {
@@ -56,67 +57,34 @@ bot.command("msg", async (ctx) => {
   const text = ctx.message.text.replace("/msg", "").trim();
 
   if (!text) {
-    return ctx.reply("Нужно указать текст. Пример:\n/msg <wow boost> August 18–20");
+    return ctx.reply("Нельзя отправить пустое сообщение.\nПример:\n/msg <wow boost> August 18–20");
   }
 
   try {
     await ctx.telegram.sendMessage(CHANNEL_ID, text);
-    await ctx.reply("Сообщение отправлено.");
-  } catch (e) {
-    console.error("Ошибка отправки:", e);
-    ctx.reply("Ошибка при отправке в канал.");
+    await ctx.reply("Сообщение отправлено в канал.");
+  } catch (err) {
+    console.error("Ошибка отправки:", err);
+    ctx.reply("Ошибка при отправке в канал. Сообщи админу.");
   }
 });
 
-// ======== команда /msg для публикаций ========
+// ======== запрещаем любые другие сообщения ========
 
-bot.command("msg", async (ctx) => {
-  if (!trusted.has(ctx.from.id)) {
-    return ctx.reply("Нет доступа.");
-  }
-
-  const text = ctx.message.text.replace("/msg", "").trim();
-
-  if (!text) {
-    return ctx.reply("Нужно указать текст. Пример:\n/msg <wow boost> August 18–20");
-  }
-
-  try {
-    await ctx.telegram.sendMessage(CHANNEL_ID, text);
-    await ctx.reply("Сообщение отправлено.");
-  } catch (e) {
-    console.error("Ошибка отправки:", e);
-    ctx.reply("Ошибка при отправке в канал.");
+bot.on("message", (ctx) => {
+  if (trusted.has(ctx.from.id)) {
+    return ctx.reply("Чтобы отправить в канал, используй:\n/msg <текст>");
   }
 });
 
-
-// ======== обработка текстовых сообщений ========
-
-bot.on("text", async (ctx) => {
-  if (!trusted.has(ctx.from.id)) {
-    return ctx.reply("Нет доступа.");
-  }
-
-  const text = ctx.message.text;
-
-  try {
-    await ctx.telegram.sendMessage(CHANNEL_ID, text);
-    await ctx.reply("Отправил в канал.");
-  } catch (e) {
-    console.error("Ошибка при отправке в канал:", e);
-    await ctx.reply("Ошибка при отправке в канал. Сообщи админу.");
-  }
-});
-
-// ======== запуск бота ========
+// ======== запуск ========
 
 bot.launch().then(() => {
   console.log("Бот запущен.");
 }).catch((e) => {
-  console.error("Ошибка при запуске бота:", e);
+  console.error("Ошибка запуска:", e);
 });
 
-// Остановка по сигналам (чтобы Render корректно перезапускал)
+// корректное завершение на Render
 process.once("SIGINT", () => bot.stop("SIGINT"));
 process.once("SIGTERM", () => bot.stop("SIGTERM"));
