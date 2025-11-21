@@ -46,6 +46,29 @@ bot.start((ctx) => {
   ctx.reply("У тебя нет доступа.");
 });
 
+// ======== команда /msg ========
+
+bot.command("msg", async (ctx) => {
+  if (!trusted.has(ctx.from.id)) {
+    return ctx.reply("Нет доступа.");
+  }
+
+  const text = ctx.message.text.replace("/msg", "").trim();
+
+  if (!text) {
+    return ctx.reply("Нужно указать текст. Пример:\n/msg <wow boost> August 18–20");
+  }
+
+  try {
+    await ctx.telegram.sendMessage(CHANNEL_ID, text);
+    await ctx.reply("Сообщение отправлено.");
+  } catch (e) {
+    console.error("Ошибка отправки:", e);
+    ctx.reply("Ошибка при отправке в канал.");
+  }
+});
+
+
 // ======== обработка текстовых сообщений ========
 
 bot.on("text", async (ctx) => {
